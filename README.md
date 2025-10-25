@@ -58,9 +58,8 @@ Splitwise API for expense sharing analysis
    - Users view all extracted transactions in a clean React interface.  
    - Expenses are grouped by category for easy analysis.
 
----
 
-## How to Run the Project
+# How to Run the Project
 
 ### 1. Backend (NodeJS + Python)
 ```bash
