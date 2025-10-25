@@ -31,7 +31,7 @@ const SCRIPTS = path.join(__dirname, "scripts");
   }
 });
 
-// Multer configuration with proper validation
+// Multer config with validation
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOADS),
   filename: (req, file, cb) => {
@@ -47,31 +47,22 @@ const fileFilter = (req, file, cb) => {
   
   const ext = path.extname(file.originalname).toLowerCase();
   
-  if (!ALLOWED_MIMETYPES.includes(file.mimetype)) {
+  if (!ALLOWED_MIMETYPES.includes(file.mimetype) || !ALLOWED_EXTENSIONS.includes(ext)) {
     return cb(new Error('Invalid file type. Only JPEG and PNG allowed.'));
   }
-  
-  if (!ALLOWED_EXTENSIONS.includes(ext)) {
-    return cb(new Error('Invalid file extension.'));
-  }
-  
   cb(null, true);
 };
 
 const upload = multer({
   storage,
   fileFilter,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB
-  }
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
 });
 
-// Error handling middleware for multer
+// Multer error handler
 const handleUploadError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
-    if (err.code === 'FILE_TOO_LARGE') {
-      return res.status(400).json({ error: 'File too large. Maximum 10MB.' });
-    }
+    if (err.code === 'FILE_TOO_LARGE') return res.status(400).json({ error: 'File too large. Max 10MB.' });
     return res.status(400).json({ error: `Upload error: ${err.message}` });
   } else if (err) {
     return res.status(400).json({ error: err.message });
@@ -79,212 +70,124 @@ const handleUploadError = (err, req, res, next) => {
   next();
 };
 
-// Helper: Parse CSV safely
+// Helper: parse CSV safely
 const parseCSV = (csvContent) => {
-  try {
-    if (!csvContent || csvContent.trim().length === 0) return [];
-    
-    const lines = csvContent.trim().split('\n');
-    if (lines.length < 2) return [];
-    
-    // Parse headers (handle quoted fields)
-    const headers = lines[0]
-      .split(',')
-      .map(h => h.trim().replace(/^"|"$/g, ''));
-    
-    // Parse rows
-    const rows = lines.slice(1).map(line => {
-      const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-      const row = {};
-      headers.forEach((h, i) => {
-        row[h] = values[i] || '';
-      });
-      return row;
-    });
-    
-    return rows;
-  } catch (err) {
-    console.error('CSV parsing error:', err);
-    return [];
-  }
+  if (!csvContent || csvContent.trim().length === 0) return [];
+  const lines = csvContent.trim().split('\n');
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  return lines.slice(1).map(line => {
+    const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+    const row = {};
+    headers.forEach((h, i) => row[h] = values[i] || '');
+    return row;
+  });
 };
 
-// Helper: Execute Python script with timeout
+// Helper: execute Python script
 const executePythonScript = (scriptPath, args, timeout = 30000) => {
   return new Promise((resolve, reject) => {
     const py = spawn('python', [scriptPath, ...args]);
-    
-    let stdout = '';
-    let stderr = '';
-    let timeoutId;
-    
-    timeoutId = setTimeout(() => {
+    let stdout = '', stderr = '';
+    const timeoutId = setTimeout(() => {
       py.kill('SIGTERM');
-      reject(new Error(`Script timeout after ${timeout / 1000}s`));
+      reject(new Error(`Python script timed out after ${timeout / 1000}s`));
     }, timeout);
-    
-    py.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-    
-    py.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-    
+
+    py.stdout.on('data', (data) => stdout += data.toString());
+    py.stderr.on('data', (data) => stderr += data.toString());
+
     py.on('close', (code) => {
       clearTimeout(timeoutId);
-      
-      if (code === 0) {
-        resolve({ stdout, stderr, code });
-      } else {
-        reject(new Error(stderr || `Python script exited with code ${code}`));
-      }
+      if (code === 0) resolve({ stdout, stderr });
+      else reject(new Error(stderr || `Python exited with code ${code}`));
     });
-    
+
     py.on('error', (err) => {
       clearTimeout(timeoutId);
-      reject(new Error(`Failed to spawn Python process: ${err.message}`));
+      reject(new Error(`Failed to spawn Python: ${err.message}`));
     });
   });
 };
 
-// Routes
-
-/**
- * POST /upload
- * Upload and process receipt image
- */
+// POST /upload: main route
 app.post("/upload", upload.single("image"), handleUploadError, async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  
+  const imagePath = req.file.path;
+  const fileName = req.file.originalname;
+
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
-
-    const imagePath = req.file.path;
-    const fileName = req.file.originalname;
-
     console.log(`📸 Processing: ${fileName}`);
 
-    try {
-      // Execute Python extraction script
-      const result = await executePythonScript(
-        path.join(SCRIPTS, "extract_expenses.py"),
-        [imagePath],
-        30000
-      );
+    // Call Python OCR + categorization + advice script
+    const result = await executePythonScript(
+      path.join(SCRIPTS, "extract_expenses.py"),
+      [imagePath],
+      40000
+    );
 
-      // Extract raw output and validate CSV generation
-      const stdout = result.stdout;
-      
-      if (!stdout.includes("CSV generated")) {
-        throw new Error("CSV generation failed - check script output");
-      }
+    const stdout = result.stdout;
 
-      // Read generated CSV
-      const csvPath = path.join(DATA, "expenses.csv");
-      let csvContent = '';
-      
-      try {
-        csvContent = await fs.readFile(csvPath, 'utf-8');
-      } catch (err) {
-        console.warn('CSV file not found:', err.message);
-        csvContent = '';
-      }
+    if (!stdout.includes("CSV generated")) throw new Error("CSV generation failed");
 
-      // Extract raw OCR text between markers
-      const rawStart = stdout.indexOf("RAW_OUTPUT_START");
-      const rawEnd = stdout.indexOf("RAW_OUTPUT_END");
-      const rawOutput = rawStart !== -1 && rawEnd !== -1
-        ? stdout.substring(rawStart + 16, rawEnd).trim()
-        : '';
+    // Read CSV if exists
+    const csvPath = path.join(DATA, "expenses.csv");
+    let csvContent = '';
+    try { csvContent = await fs.readFile(csvPath, 'utf-8'); } 
+    catch (err) { console.warn('CSV not found:', err.message); }
 
-      // Clean up uploaded file
-      try {
-        await fs.unlink(imagePath);
-      } catch (err) {
-        console.warn(`Failed to delete temp file: ${err.message}`);
-      }
+    // Extract raw OCR text
+    const rawStart = stdout.indexOf("RAW_OUTPUT_START");
+    const rawEnd = stdout.indexOf("RAW_OUTPUT_END");
+    const rawOutput = rawStart !== -1 && rawEnd !== -1
+      ? stdout.substring(rawStart + 16, rawEnd).trim()
+      : '';
 
-      // Parse CSV and return response
-      const csvData = parseCSV(csvContent);
+    // Parse CSV
+    const csvData = parseCSV(csvContent);
 
-      console.log(`✅ Successfully processed: ${fileName}`);
-      
-      return res.json({
-        success: true,
-        csv: csvContent,
-        raw_output: rawOutput,
-        data: csvData[0] || {} // Return first row as object
-      });
+    console.log(`✅ Processed: ${fileName}`);
 
-    } catch (pythonErr) {
-      // Cleanup on Python script error
-      try {
-        await fs.unlink(imagePath);
-      } catch (err) {
-        console.warn(`Failed to delete temp file: ${err.message}`);
-      }
-
-      console.error(`❌ Processing error: ${pythonErr.message}`);
-      return res.status(500).json({
-        error: "Failed to process image",
-        details: pythonErr.message
-      });
-    }
+    // Response includes CSV, first row, and raw OCR
+    return res.json({
+      success: true,
+      file: fileName,
+      csv: csvContent,
+      raw_output: rawOutput,
+      data: csvData[0] || {}
+    });
 
   } catch (err) {
-    console.error(`❌ Upload error: ${err.message}`);
-    return res.status(500).json({
-      error: "Upload processing failed",
-      details: err.message
-    });
+    console.error(`❌ Processing error: ${err.message}`);
+    return res.status(500).json({ error: "Processing failed", details: err.message });
+  } finally {
+    // Clean up uploaded file
+    try { await fs.unlink(imagePath); } catch (err) { console.warn(`Failed to delete temp file: ${err.message}`); }
   }
 });
 
-/**
- * GET /health
- * Health check endpoint
- */
-app.get("/health", (req, res) => {
-  res.json({
-    status: "ok",
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
+// Health check
+app.get("/health", (req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
 
-/**
- * GET /stats
- * Get directory statistics
- */
+// Stats
 app.get("/stats", async (req, res) => {
   try {
     const uploadCount = (await fs.readdir(UPLOADS)).length;
     const dataFiles = (await fs.readdir(DATA)).length;
-
-    res.json({
-      uploads: uploadCount,
-      dataFiles,
-      port: PORT,
-      scriptPath: SCRIPTS
-    });
+    res.json({ uploads: uploadCount, dataFiles, port: PORT });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: "Endpoint not found" });
-});
+app.use((req, res) => res.status(404).json({ error: "Endpoint not found" }));
 
-// Global error handler
+// Global error
 app.use((err, req, res, next) => {
   console.error("Unhandled error:", err);
-  res.status(500).json({
-    error: "Internal server error",
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });
+  res.status(500).json({ error: "Internal server error", message: process.env.NODE_ENV === 'development' ? err.message : undefined });
 });
 
 // Start server
@@ -298,8 +201,5 @@ const server = app.listen(PORT, () => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
+  server.close(() => process.exit(0));
 });
