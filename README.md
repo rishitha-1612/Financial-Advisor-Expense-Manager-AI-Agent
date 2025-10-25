@@ -46,21 +46,40 @@ Splitwise API for expense sharing analysis
 
 # System Workflow
 
-1. Upload & Extraction
-Users upload screenshots, receipts, or statements.
-OCR extracts transaction text and identifies key financial details.
+1. **Upload & Extraction**  
+   - Users upload payment screenshots or receipts through the frontend.  
+   - Python OCR script (`extract_expenses.py`) extracts transaction data.
 
-2. Expense Analysis
-Extracted data is categorized into predefined financial groups.
-Spending summaries and budget breakdowns are automatically generated.
+2. **Expense Categorization**  
+   - Extracted data is categorized automatically.  
+   - Categorized data is sent back to the frontend.
 
-3. AI Financial Advice
-The system analyzes user spending habits.
-Provides educational financial guidance using principles from popular financial experts and books.
+3. **Visualization**  
+   - Users view all extracted transactions in a clean React interface.  
+   - Expenses are grouped by category for easy analysis.
 
-4. Visualization & Reporting
-Dashboards display expenses, budgets, and savings progress.
-Exportable financial reports and summaries are generated for user records.
+---
+
+## How to Run the Project
+
+### 1. Backend (NodeJS + Python)
+```bash
+cd expenses-ocr-backend
+npm install
+# Start backend server
+node index.js
+```
+Make sure Python is installed and your OCR library (Tesseract or equivalent) is configured.
+
+2. Frontend (React)
+```bash
+Copy code
+cd expenses-ocr-frontend
+npm install
+npm start
+```
+The frontend will run on http://localhost:3000 by default and communicate with the backend API.
+
 
 # Example Use Cases
 
