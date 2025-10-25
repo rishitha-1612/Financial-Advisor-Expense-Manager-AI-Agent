@@ -1,0 +1,19 @@
+# Node dependencies
+node_modules/
+
+# Python virtual environment
+venv/
+.env/
+
+# Service account and API keys
+*.json
+!package.json
+!package-lock.json
+*.env
+
+# Uploaded files (optional)
+uploads/
+
+# Editor/System files
+.DS_Store
+.vscode/
