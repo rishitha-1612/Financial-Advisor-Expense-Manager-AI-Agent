@@ -72,7 +72,6 @@ Make sure Python is installed and your OCR library (Tesseract or equivalent) is 
 
 2. Frontend (React)
 ```bash
-Copy code
 cd expenses-ocr-frontend
 npm install
 npm start
