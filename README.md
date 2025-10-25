@@ -11,6 +11,9 @@ An AI-powered financial advisor and expense management system that provides pers
 5. Create budget recommendations, spending summaries, and goal-based planning insights.
 6. Allow users to upload financial books, articles, and documents for AI-driven synthesis of advice tailored to their unique financial patterns.
 
+# Project Demo 
+https://drive.google.com/drive/folders/1Un1Wsu3ganXEa4Y4WwzcKQpiVdq-KG89?usp=sharing
+
 # Key Features
 
 1. Automated Expense Extraction – Uses OCR to extract text and transaction data from payment screenshots, receipts, and statements.
@@ -68,7 +71,12 @@ npm install
 # Start backend server
 node index.js
 ```
-Make sure Python is installed and your OCR library (Tesseract or equivalent) is configured.
+Make sure the following modules are installed
+```bash
+npm install express multer cors
+npm install --save-dev nodemon
+pip install opencv-python pytesseract pandas numpy
+```
 
 2. Frontend (React)
 ```bash
@@ -94,6 +102,6 @@ Project developed by a team of three Computer Science Engineering students from 
 | Name              | GitHub                              | Email ID                                               |
 |-------------------|-------------------------------------|--------------------------------------------------------|
 | Sowmya P R        | https://github.com/2406-Sowmya      | srsb2406@gmail.com                                     |
-| Aishwarya R       | https://github.com/AISHWARYA251166  | [LinkedIn](https://www.linkedin.com/in/linkedin2/)     |
+| Aishwarya R       | https://github.com/AISHWARYA251166  | ar2573564@gmail.com    |
 | Rishitha Rasineni | https://github.com/rishitha-1612    | rishitharasineni@gmail.com                             |
 
